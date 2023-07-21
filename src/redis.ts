@@ -27,8 +27,8 @@ class RedisAdapter {
     return this.client.incrBy(key, increment)
   }
 
-  zrangebyscore() {
-
+  zrangebyscore(key: string, min: string | number, max: string | number, limit?: { offset: number, count: number }) {
+    return this.client.zRangeByScore(key, min, max, { LIMIT: limit })
   }
 
   private async connect() {
