@@ -3,14 +3,16 @@ import * as _ from 'lodash'
 // NewCompute SnowFlake (IEEE 754 floating point number compatible)
 // [42 bit date][5 bit enum][5 bit counter]
 
+export type Snowflake = string
+
 const NEWCOMPUTE_EPOCH = 1689206400000
 const DATE_BITS        = 42
 const COUNTER_BITS     = 5
 const EXTRA_BITS       = 5
 
-let counter = 0 // hook up to redis eventually. localized for now
+let counter = 0
 
-export const getNextId = (extraValue: number) => {
+export const next = (extraValue: number): Snowflake => {
   const count = BigInt.asIntN(COUNTER_BITS, BigInt(getCount()))
   const extra = BigInt.asIntN(EXTRA_BITS, BigInt(extraValue)) << BigInt(COUNTER_BITS);
   const detail = extra | count
@@ -18,7 +20,7 @@ export const getNextId = (extraValue: number) => {
   return (getTimeBigNum(new Date()) | detail).toString()
 }
 
-export const getTime = (date?: Date) => {
+export const makeFromTime = (date?: Date): Snowflake => {
   date = _.isNil(date) ? new Date() : date
   return getTimeBigNum(date).toString()
 }
