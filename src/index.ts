@@ -2,15 +2,16 @@ import * as _ from 'lodash'
 import { encode, encodeChat } from 'gpt-tokenizer'
 import { RedisClientType } from 'redis'
 
-import { ModelConfigs, OpenAIChatModel, OptionalModelConfigs, RateLimit } from "./config"
+import { ModelConfigs, OpenAIChatModel, OptionalModelConfigs, DefaultModelConfigs, RateLimit } from "./config"
 import * as SnowflakeId from './snowflakeId'
 import { Snowflake } from './snowflakeId'
 
 export type JanusAIConfig = {
-  modelConfigs: OptionalModelConfigs
+  modelConfigs: ModelConfigs
 }
 
-export type JanusAIValidator = {
+export type JanusAIOptions = {
+  customLimits?: OptionalModelConfigs
 }
 
 export type ChatMessage = { 
@@ -49,26 +50,36 @@ export function getKey(redisKey: RedisKey, model: OpenAIChatModel, keyId: string
 }
 
 export class JanusAI {
-  private config?: JanusAIConfig
-  private modelConfigs: ModelConfigs
-  private validators: JanusAIValidator[] = []
+  private config: JanusAIConfig
   private redis: RedisClientType
 
-  // TODO - set this up so that there are per key rate limits
-  constructor(redis: RedisClientType, config?: JanusAIConfig) {
+  constructor(redis: RedisClientType, options?: JanusAIOptions) {
     this.redis = redis
-    this.config = config
-    this.modelConfigs = config ? { ...ModelConfigs, ...config.modelConfigs } : ModelConfigs
+    this.config = { 
+      modelConfigs: _.merge(DefaultModelConfigs, options?.customLimits)
+    }
   }
 
-  private getTokenLimit = (model: OpenAIChatModel): RateLimit => this.modelConfigs[model].rateLimits.token
-  private getRequestLimit = (model: OpenAIChatModel): RateLimit => this.modelConfigs[model].rateLimits.request
+  getTokenLimit = (
+    model: OpenAIChatModel, 
+    keyId: string = 'default'
+  ): RateLimit | undefined => this.config.modelConfigs[model][keyId].rateLimits.token
+
+  getRequestLimit = (
+    model: OpenAIChatModel, 
+    keyId: string = 'default'
+  ): RateLimit | undefined => this.config.modelConfigs[model][keyId].rateLimits.request
 
   private getTokens(data: string | ChatMessage[]) {
     return typeof data === 'string' ? encode(data) : encodeChat(data)
   }
 
-  private async pruneAndCount(inputTokensKey: string, outputTokensKey: string, requestsKey: string, interval: 'minute' | 'second'): Promise<{ inputTokenCount: number, outputTokenCount: number, requestCount: number }> {
+  private async pruneAndCount(
+    inputTokensKey: string, 
+    outputTokensKey: string, 
+    requestsKey: string, 
+    interval: 'minute' | 'second'
+  ): Promise<{ inputTokenCount: number, outputTokenCount: number, requestCount: number }> {
     const target = SnowflakeId.makeFromTime(new Date(new Date().getTime() - (1000 * (interval === 'minute' ? 60 : 1))))
 
     const results = await this.redis.multi()
@@ -95,8 +106,10 @@ export class JanusAI {
     const requestsKey = getKey(RedisKey.REQUESTS, model, keyId)
 
     const tokens = this.getTokens(data)
-    const tokenLimit = this.getTokenLimit(model)
-    const requestLimit = this.getRequestLimit(model)
+    const tokenLimit = this.getTokenLimit(model, keyId)
+    const requestLimit = this.getRequestLimit(model, keyId)
+
+    if (tokenLimit === undefined || requestLimit === undefined) throw new Error('Invalid model keyId')
     
     const { inputTokenCount, outputTokenCount, requestCount} = await this.pruneAndCount(inputTokensKey, outputTokensKey, requestsKey, tokenLimit.interval)
 
