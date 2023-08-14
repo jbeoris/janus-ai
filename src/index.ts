@@ -1,6 +1,6 @@
 import * as _ from 'lodash'
-import { encode, encodeChat } from 'gpt-tokenizer'
 import { RedisClientType } from 'redis'
+import * as OpenAIChatTokens from 'openai-chat-tokens'
 
 import { ModelConfigs, OpenAIChatModel, OptionalModelConfigs, DefaultModelConfigs, RateLimit } from "./config"
 import * as SnowflakeId from './snowflakeId'
@@ -37,7 +37,27 @@ const DEFAULT_KEY_ID = 'default'
 
 export type RegisterChatOptions = {
   model: OpenAIChatModel, 
-  data: string | ChatMessage[], 
+  data: { messages: ChatMessage[], functions?: any[] } , 
+  keyId?: string
+}
+
+interface OuputInnerData { 
+  content?: string, 
+  function_call?: { 
+    arguments?: string, 
+    name?: string 
+  } 
+} 
+
+interface StandardOutputChoice { message: OuputInnerData }
+interface StreamOutputChoice { delta: OuputInnerData }
+
+export type RegisterOutputOptions = {
+  type: 'standard' | 'stream',
+  model: OpenAIChatModel, 
+  data: { 
+    choices: StandardOutputChoice[] | StreamOutputChoice[]
+  } , 
   keyId?: string
 }
 
@@ -70,10 +90,6 @@ export class JanusAI {
     keyId: string = 'default'
   ): RateLimit | undefined => this.config.modelConfigs[model][keyId].rateLimits.request
 
-  private getTokens(data: string | ChatMessage[]) {
-    return typeof data === 'string' ? encode(data) : encodeChat(data)
-  }
-
   private async pruneAndCount(
     inputTokensKey: string, 
     outputTokensKey: string, 
@@ -105,7 +121,7 @@ export class JanusAI {
     const outputTokensKey = getKey(RedisKey.OUTPUT_TOKENS, model, keyId)
     const requestsKey = getKey(RedisKey.REQUESTS, model, keyId)
 
-    const tokens = this.getTokens(data)
+    const tokenCount = OpenAIChatTokens.promptTokensEstimate(data)
     const tokenLimit = this.getTokenLimit(model, keyId)
     const requestLimit = this.getRequestLimit(model, keyId)
 
@@ -113,39 +129,51 @@ export class JanusAI {
     
     const { inputTokenCount, outputTokenCount, requestCount} = await this.pruneAndCount(inputTokensKey, outputTokensKey, requestsKey, tokenLimit.interval)
 
+    console.log(inputTokenCount, outputTokenCount, requestCount)
+
     const currentTokenCount = inputTokenCount + outputTokenCount
 
-    if (currentTokenCount + tokens.length > tokenLimit.count) throw new Error('Input will surpass token count rate limit.')
+    if (currentTokenCount + tokenCount > tokenLimit.count) throw new Error('Input will surpass token count rate limit.')
     if (requestCount + 1 > requestLimit.count) throw new Error('Request will surpass request count rate limit.')
 
     const id = SnowflakeId.next(0)
-    const dataObject: DataObject = { id, type: 'input', tokenCount: tokens.length, model, keyId }
+    const dataObject: DataObject = { id, type: 'input', tokenCount, model, keyId }
 
     let zAddCommand = ['ZADD', inputTokensKey]
 
-    for (let token of tokens) {
-      zAddCommand.push(id, token.toString(10))
+    for (let i = 0; i < tokenCount; i++) {
+      zAddCommand.push(id, `${id}:${i.toString(10)}`)
     }
 
     await this.redis.sendCommand(zAddCommand)
-    await this.redis.sendCommand(['ZADD', requestsKey, id, tokens.length.toString(10)])
+    await this.redis.sendCommand(['ZADD', requestsKey, id, `${id}:${tokenCount.toString(10)}`])
 
     return dataObject
   }
 
-  async registerChatOutput(options: RegisterChatOptions): Promise<DataObject> {
+  async registerChatOutput(options: RegisterOutputOptions): Promise<DataObject> {
     const { model, keyId = DEFAULT_KEY_ID, data } = options
     const outputTokensKey = getKey(RedisKey.OUTPUT_TOKENS, model, keyId)
 
-    const tokens = this.getTokens(data)
+    let tokenCount = 0
+
+    for (let choice of options.data.choices) {
+      const innerData: OuputInnerData = options.type === 'standard' ? 
+        (choice as StandardOutputChoice).message : 
+        (choice as StreamOutputChoice).delta
+        
+      if (innerData.content) tokenCount += OpenAIChatTokens.stringTokens(innerData.content)
+      if (innerData.function_call?.name) tokenCount += OpenAIChatTokens.stringTokens(innerData.function_call?.name)
+      if (innerData.function_call?.arguments) tokenCount += OpenAIChatTokens.stringTokens(innerData.function_call?.arguments)
+    }
 
     const id = SnowflakeId.next(0)
-    const dataObject: DataObject = { id, type: 'output', tokenCount: tokens.length, model, keyId }
+    const dataObject: DataObject = { id, type: 'output', tokenCount, model, keyId }
 
     let zAddCommand = ['ZADD', outputTokensKey]
 
-    for (let token of tokens) {
-      zAddCommand.push(id, token.toString(10))
+    for (let i = 0; i < tokenCount; i++) {
+      zAddCommand.push(id, i.toString(10))
     }
 
     await this.redis.sendCommand(zAddCommand)
