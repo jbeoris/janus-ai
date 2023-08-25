@@ -3,11 +3,11 @@ import { RedisClientType, createClient } from 'redis';
 
 const redis: RedisClientType = createClient()
 
-const makeDefaultJanus = async () => {
-  await redis.connect()
-  return new JanusAI(redis)
-}
-const makeOverrideJanus = () => new JanusAI(redis, { 
+let defaultJanus: JanusAI | undefined
+const makeDefaultJanus = () => new JanusAI()
+
+let overrideJanus: JanusAI | undefined
+const makeOverrideJanus = () => new JanusAI({ 
   customLimits: { 
     'gpt-3.5-turbo': {
       'one': {
@@ -20,30 +20,40 @@ const makeOverrideJanus = () => new JanusAI(redis, {
   } 
 })
 
-// test('Get Default Model TPM', () => {
-//   expect(makeDefaultJanus().getTokenLimit('gpt-3.5-turbo')?.count).toBe(90000);
-// });
+beforeEach(async () => {
+  defaultJanus = makeDefaultJanus()
+  overrideJanus = makeOverrideJanus()
+  await defaultJanus.connect()
+  await overrideJanus.connect()
+});
 
-// test('Get Default Model RPM', () => {
-//   expect(makeDefaultJanus().getRequestLimit('gpt-3.5-turbo')?.count).toBe(3500);
-// });
+afterEach(async () => {
+  await defaultJanus?.disconnect()
+  await overrideJanus?.disconnect()
+});
 
-// test('Get Override Model TPM', () => {
-//   expect(makeDefaultJanus().getTokenLimit('gpt-3.5-turbo')?.count).toBe(90000);
-//   expect(makeOverrideJanus().getTokenLimit('gpt-3.5-turbo', 'one')?.count).toBe(300);
-// });
+test('Get Default Model TPM', () => {
+  expect(defaultJanus?.getTokenLimit('gpt-3.5-turbo')?.count).toBe(90000);
+});
 
-// test('Get Override Model RPM', () => {
-//   expect(makeDefaultJanus().getRequestLimit('gpt-3.5-turbo')?.count).toBe(3500);
-//   expect(makeOverrideJanus().getRequestLimit('gpt-3.5-turbo', 'one')?.count).toBe(200);
-// });
+test('Get Default Model RPM', () => {
+  expect(defaultJanus?.getRequestLimit('gpt-3.5-turbo')?.count).toBe(3500);
+});
+
+test('Get Override Model TPM', () => {
+  expect(defaultJanus?.getTokenLimit('gpt-3.5-turbo')?.count).toBe(90000);
+  expect(overrideJanus?.getTokenLimit('gpt-3.5-turbo', 'one')?.count).toBe(300);
+});
+
+test('Get Override Model RPM', () => {
+  expect(defaultJanus?.getRequestLimit('gpt-3.5-turbo')?.count).toBe(3500);
+  expect(overrideJanus?.getRequestLimit('gpt-3.5-turbo', 'one')?.count).toBe(200);
+});
 
 test('test rate limit', async () => {
-  const janus = await makeDefaultJanus()
-
   const chatInput: RegisterChatOptions = { 
     model: 'gpt-3.5-turbo', 
-    data: { 
+    data: {
       messages: [
         { 
           role: 'system',
@@ -57,13 +67,9 @@ test('test rate limit', async () => {
     }
   }
 
-  for (let i = 0; i < 10000; i++) {
-    try {
-      await janus.registerChatInput(chatInput)
-    } catch (err) {
-      console.error(err)
-    }
-  }
+  const results = await defaultJanus?.registerChatInput(chatInput)
 
-  return await redis.disconnect()
+  console.log(results)
+
+  return
 })

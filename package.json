@@ -1,11 +1,12 @@
 {
   "name": "janus-ai",
-  "version": "1.0.0",
-  "description": "An AI service rate-limit enforcer backed by Redis",
-  "main": "index.js",
+  "version": "0.1.0",
+  "description": "An AI service rate-limit enforcer powered by Redis",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "test": "jest --config jestconfig.json",
+    "test": "jest --config jestconfig.json --detectOpenHandles",
     "format": "prettier --write \"src/**/*.ts\" \"src/**/*.js\"",
     "lint": "tslint -p tsconfig.json",
     "prepare": "npm run build",
@@ -22,8 +23,12 @@
     "rate-limit",
     "ai"
   ],
-  "author": "jbeoris",
-  "license": "ISC",
+  "author": {
+    "email": "jack@jackbeoris.com",
+    "name": "Jack Beoris",
+    "url": "https://jackbeoris.com"
+  },
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/jbeoris/janus-ai/issues"
   },
@@ -39,12 +44,12 @@
     "typescript": "^5.1.6"
   },
   "files": [
-    "lib/**/*"
+    "dist"
   ],
   "dependencies": {
-    "gpt-tokenizer": "^2.1.1",
     "lodash": "^4.17.21",
-    "openai-chat-tokens": "^0.2.4",
+    "openai": "^4.2.0",
+    "openai-chat-tokens": "^0.2.6",
     "redis": "^4.6.7"
   }
 }

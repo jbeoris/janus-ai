@@ -13,8 +13,8 @@ const EXTRA_BITS       = 5
 let counter = 0
 
 export const next = (extraValue: number): Snowflake => {
-  const count = BigInt.asIntN(COUNTER_BITS, BigInt(getCount()))
-  const extra = BigInt.asIntN(EXTRA_BITS, BigInt(extraValue)) << BigInt(COUNTER_BITS);
+  const count = BigInt.asUintN(COUNTER_BITS, BigInt(getCount()))
+  const extra = BigInt.asUintN(EXTRA_BITS, BigInt(extraValue)) << BigInt(COUNTER_BITS);
   const detail = extra | count
 
   return (getTimeBigNum(new Date()) | detail).toString()
@@ -27,15 +27,15 @@ export const makeFromTime = (date?: Date): Snowflake => {
 
 const getTimeBigNum = (date: Date): bigint => {
   let timestamp = (date).getTime() - NEWCOMPUTE_EPOCH
-  return BigInt.asIntN(DATE_BITS, BigInt(timestamp)) << BigInt(COUNTER_BITS + EXTRA_BITS)
+  return BigInt.asUintN(DATE_BITS, BigInt(timestamp)) << BigInt(COUNTER_BITS + EXTRA_BITS)
 }
 
 const getCount = (): number => {
     const count = counter
-    if (counter < Math.pow(2, COUNTER_BITS)) {
+    if (counter < Math.pow(2, COUNTER_BITS) - 1) {
         counter += 1
     } else {
-        counter = 1
+        counter = 0
     }
     return count
 }
