@@ -13,7 +13,7 @@ janus.connect();
 
 const registerInput = async () => {
   const janusDataObject = await janus.registerChatInput({
-    model: 'gpt4', 
+    model: 'gpt-4', 
     data: { 
       messages: [
         {
