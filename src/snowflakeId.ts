@@ -26,7 +26,7 @@ export const makeFromTime = (date?: Date): Snowflake => {
 }
 
 const getTimeBigNum = (date: Date): bigint => {
-  let timestamp = (date).getTime() - NEWCOMPUTE_EPOCH
+  const timestamp = (date).getTime() - NEWCOMPUTE_EPOCH
   return BigInt.asUintN(DATE_BITS, BigInt(timestamp)) << BigInt(COUNTER_BITS + EXTRA_BITS)
 }
 

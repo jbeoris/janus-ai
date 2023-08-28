@@ -1,8 +1,6 @@
 import JanusAI, { RegisterChatOptions } from '../index';
 import { RedisClientType, createClient } from 'redis';
 
-const redis: RedisClientType = createClient()
-
 let defaultJanus: JanusAI | undefined
 const makeDefaultJanus = () => new JanusAI()
 

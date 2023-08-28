@@ -16,9 +16,12 @@ export type JanusAIConfig = {
   modelConfigs: ModelConfigs;
 };
 
+type LogHandler = (level: 'log' | 'error' | 'info', ...data: any[]) => void
+
 export type JanusAIOptions = {
   customLimits?: OptionalModelConfigs;
-  redis?: Redis.RedisClientOptions<Redis.RedisModules, Record<string, never>, Record<string, never>> | undefined
+  redis?: Redis.RedisClientOptions<Redis.RedisModules, Record<string, never>, Record<string, never>> | undefined,
+  logHandler?: LogHandler
 };
 
 export type ChatMessage = {
@@ -96,9 +99,15 @@ export function getKey(
 export class JanusAI {
   private config: JanusAIConfig;
   private redis: RedisClientType;
+  private logger;
 
   constructor(options?: JanusAIOptions) {
-    this.redis = createRedisClient(options?.redis)
+    this.redis = createRedisClient(options?.redis);
+    this.logger = {
+      log: (...data: any[]) => options?.logHandler?.('log', ...data),
+      info: (...data: any[]) => options?.logHandler?.('info', ...data),
+      error: (...data: any[]) => options?.logHandler?.('error', ...data),
+    }
 
     this.config = {
       modelConfigs: _.merge(DefaultModelConfigs, options?.customLimits),
@@ -175,7 +184,7 @@ export class JanusAI {
         tokenLimit.interval
       );
 
-    console.log(
+    this.logger.log(
       `SYSTEM STATUS for ${model}: inputTokenCount=${inputTokenCount}, outputTokenCount=${outputTokenCount}, requestCount=${requestCount}`
     );
   }
@@ -211,7 +220,8 @@ export class JanusAI {
 
     const currentTokentLoad = currentTokenCount / tokenLimit.count;
     const currentRequestLoad = requestCount / requestLimit.count;
-    console.log(
+
+    this.logger.log(
       "token limit percentage:",
       currentTokentLoad,
       "\n request limit percentage:",
@@ -231,7 +241,7 @@ export class JanusAI {
     };
 
     if (tokenCount > 0) {
-      let zAddCommand = ["ZADD", inputTokensKey];
+      const zAddCommand = ["ZADD", inputTokensKey];
 
       for (let i = 0; i < tokenCount; i++) {
         zAddCommand.push(id, `${id}:${i.toString(10)}`);
@@ -258,7 +268,7 @@ export class JanusAI {
 
     let tokenCount = 0;
 
-    for (let choice of options.data.choices) {
+    for (const choice of options.data.choices) {
       const innerData: OuputInnerData =
         options.type === "standard"
           ? (choice as StandardOutputChoice).message
@@ -286,7 +296,7 @@ export class JanusAI {
     };
 
     if (tokenCount > 0) {
-      let zAddCommand = ["ZADD", outputTokensKey];
+      const zAddCommand = ["ZADD", outputTokensKey];
 
       for (let i = 0; i < tokenCount; i++) {
         zAddCommand.push(id, `${id}:${i.toString(10)}`);
