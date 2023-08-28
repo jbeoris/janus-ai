@@ -55,6 +55,8 @@ export type RegisterChatOptions = {
   model: OpenAIChatModel;
   data: { messages: ChatMessage[]; functions?: any[] };
   keyId?: string;
+  maxRequestLoad?: number;
+  maxTokenLoad?: number;
 };
 
 interface OuputInnerData {
@@ -185,7 +187,7 @@ export class JanusAI {
       );
 
     this.logger.log(
-      `SYSTEM STATUS for ${model}: inputTokenCount=${inputTokenCount}, outputTokenCount=${outputTokenCount}, requestCount=${requestCount}`
+      `JANUS AI SYSTEM LOAD: for ${model}: inputTokenCount=${inputTokenCount}, outputTokenCount=${outputTokenCount}, requestCount=${requestCount}`
     );
   }
 
@@ -225,8 +227,17 @@ export class JanusAI {
       "token limit percentage:",
       currentTokentLoad,
       "\n request limit percentage:",
-      currentRequestLoad
+      currentRequestLoad,
+      "\n max request load:",
+      options.maxRequestLoad,
+      "\n max token load:",
+      options.maxTokenLoad
     );
+
+    if (options.maxTokenLoad && currentTokentLoad > options.maxTokenLoad) 
+      throw new Error("Input will surpass token load rate limit.");
+    if (options.maxRequestLoad && currentRequestLoad > options.maxRequestLoad) 
+      throw new Error("Request will surpass request load rate limit.");
 
     const id = SnowflakeId.next(0);
     const dataObject: DataObject = {
